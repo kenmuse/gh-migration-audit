@@ -108,14 +108,14 @@ async function uncompressZip(inputStream, outputStream) {
       if (type ==='File' && fileName.endsWith('/node.exe')) {
         await new Promise((resolve, reject) =>
         {
-            console.debug(`Extracting ${fileName}`);
+            debug(`Extracting ${fileName}`);
             entry.pipe(outputStream)
             .on('finish', () => {
-                console.debug(`Extraction complete`);
+                debug(`Extraction complete`);
                 resolve()
             })
             .on('error', (err) => { 
-                console.debug(`Extraction failed: ${err}`);
+                debug(`Extraction failed: ${err}`);
                 reject(err);
             });
         });
@@ -132,7 +132,7 @@ async function uncompressXz(inputStream, outputStream) {
 
     extract.on('entry', function (header, stream, next) {
         if (header.name.endsWith('/bin/node')) {
-            console.debug(`Extracting ${header.name}`);
+            debug(`Extracting ${header.name}`);
             stream.on('data', function (chunk) {
                 chunks.push(chunk);
             });
@@ -149,7 +149,7 @@ async function uncompressXz(inputStream, outputStream) {
         if (chunks.length) {
             var data = Buffer.concat(chunks);
             outputStream.write(data);
-            console.debug(`Extraction complete`);
+            debug(`Extraction complete`);
         }
     })
 
@@ -222,7 +222,7 @@ async function prepareOutputDirectory() {
 }
 
 async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch) {
-    console.debug('Writing executable');
+    debug('Writing executable');
     let params = ['postject', nodeBinaryPath, 'NODE_SEA_BLOB', path.resolve(path.join(binaryOutputFolder, 'migration-audit.blob')), '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'];
 
     params.concat(await prepareSignature(platform, arch, nodeBinaryPath));
@@ -255,7 +255,7 @@ async function getDownloadStream(platform, arch, nodeVersion) {
 
 async function extractNodeBinaryFromStream(platform, inputStream, outputPath) {
     const binaryFileStream = fs.createWriteStream(outputPath);
-    console.debug('Processing compressed stream');
+    debug('Processing compressed stream');
 
     if (platform === PLATFORM_NAME.WINDOWS) {
         await uncompressZip(inputStream, binaryFileStream);
@@ -282,25 +282,68 @@ async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFol
     return outputPath;
 }
 
+function isActionsRunner() {
+
+}
+
+function startGroup(group) {
+    if (isActionsRunner){
+        console.log(`::group::${group}`);
+    }
+}
+
+function endGroup(group) {
+    if (isActionsRunner){
+        console.log('::endgroup::');
+    }
+}
+
+function debug(message) {
+    if (isActionsRunner){
+        console.log(`::debug::${message}`);
+        console.debug(message);
+    }
+    else {
+        console.debug(message);
+    }
+}
+
+function warn(message) {
+    if (isActionsRunner){
+        console.log(`::warn::${message}`);
+        console.warn(message);
+    }
+    else {
+        console.warn(message);
+    }
+}
+
 async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
+    startGroup("Find signtool");
     const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
-    console.debug(`Searching ${windowsKitsFolder}`);
+    debug('')
+    debug(`Searching ${windowsKitsFolder}`);
     const kits = await fs.promises.readdir(windowsKitsFolder);
     for (const kit of kits){
         const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
-        console.debug(`Examining ${kitFolderRoot}`);
+        debug(`Examining ${kitFolderRoot}`);
         const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
         for (const kitFolder of kitVersionFolders) {
             const toolPath = `${kitFolderRoot}${kitFolder}/x64/signtool.exe`;
-            console.debug(`Seeking ${toolPath}`);
-            const stat = await fs.promises.stat(toolPath);
-            if (stat.isFile()){
-                return toolPath;
+            debug(`Seeking ${toolPath}`);
+            try {
+                const stat = await fs.promises.stat(toolPath);
+                if (stat.isFile()){
+                    return toolPath;
+                }
+            }
+            catch {
+                debug(`Skipping ${toolPath}`);
             }
         }
     }
 
-    console.warn('Signtool not found');
+    warn('Signtool not found');
     return 'signtool.exe';
 }
 
