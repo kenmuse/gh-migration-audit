@@ -63,6 +63,7 @@ jobs:
       PLATFORM_OS_NAME: ${{ matrix.os == 'ubuntu' && 'linux' || matrix.os }}
       PLATFORM_NODE_EXECUTABLE_NAME: migration-audit-${{ matrix.os == 'macos' && 'darwin' || (matrix.os == 'windows' && 'win' || 'linux' )}}
       PLATFORM_GH_EXECUTABLE_NAME: gh-migration-audit-${{ matrix.os == 'macos' && 'darwin' || (matrix.os == 'windows' && 'windows' || 'linux' )}}
+      PLATFORM_EXTENSION: -${{ matrix.os == 'macos' && '' || (matrix.os == 'windows' && '.exe' || '' )}}
 
     steps:
       - name: Checkout
@@ -82,22 +83,22 @@ jobs:
         run: npm run packageSea ${{env.PLATFORM_OS_NAME}}
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules
-        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64 bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64
+        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
 
       - name: Rename ARM64 binary to conform to GitHub CLI extension rules
-        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-arm64 bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64
+        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-arm64${{env.PLATFORM_EXTENSION}} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64${{env.PLATFORM_EXTENSION}}
       
       - name: Upload ARM64 binary as artifact
         uses: actions/upload-artifact@v4
         with:
           name: package-${{matrix.os}}-arm64
-          path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64
+          path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64${{env.PLATFORM_EXTENSION}}
       
       - name: Upload x64 binary as artifact
         uses: actions/upload-artifact@v4
         with:
           name: package-${{matrix.os}}-amd64
-          path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64
+          path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
 
   create_release:
     name: Create release
