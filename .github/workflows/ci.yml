@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: 18.x
+  NODE_VERSION: 22.x
 
 jobs:
   test_and_lint:
