@@ -87,7 +87,6 @@ jobs:
         timeout-minutes: 1
         run: |
           cd bin
-          ls -l
           ./${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}}
           exit 0
 
