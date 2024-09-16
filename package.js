@@ -34,7 +34,7 @@ const archs = [
 await main();
 
 // --------- Supporting Functions  ---------------
-let signtool;
+let signtool = undefined;
 async function main() {
     const args = process.argv;
     const options = {
