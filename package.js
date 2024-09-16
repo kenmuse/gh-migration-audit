@@ -260,7 +260,7 @@ async function getDownloadStream(platform, arch, nodeVersion) {
 }
 
 async function extractNodeBinaryFromStream(platform, inputStream, outputPath) {
-    const binaryFileStream = fs.createWriteStream(outputPath);
+    const binaryFileStream = fs.createWriteStream(outputPath, { mode: 0o755 });
     debug('Processing compressed stream');
 
     if (platform === PLATFORM_NAME.WINDOWS) {
