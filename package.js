@@ -287,11 +287,11 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     console.debug(`Searching ${windowsKitsFolder}`);
     const kits = await fs.promises.readdir(windowsKitsFolder);
     for (const kit of kits){
-        const kitFolderRoot = `${windowsKitsFolder}/{kit}/bin/`;
+        const kitFolderRoot = `${windowsKitsFolder}${kit}bin/`;
         console.debug(`Examining ${kitFolderRoot}`);
         const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
         for (const kitFolder of kitVersionFolders) {
-            const toolPath = `${kitFolderRoot}/${kitFolder}/x64/signtool.exe`;
+            const toolPath = `${kitFolderRoot}${kitFolder}x64/signtool.exe`;
             console.debug(`Seeking ${toolPath}`);
             const stat = await fs.promises.stat(toolPath);
             if (stat.isFile()){
