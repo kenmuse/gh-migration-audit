@@ -164,9 +164,10 @@ async function uncompressXz(inputStream, outputStream) {
 }
 
 function exec(cmd, args){
+    const needQuotes = process.platform === 'win32' && cmd.indexOf(' ') > -1;
     const processResult = child_process.spawnSync(
-        cmd,
-        args,
+        needQuotes ? `\"{$cmd}\"` : cmd,
+        args.map(t => process.platform === 'win32' && t.indexOf(' ') > -1 ? `\"${t}\"` : t),
         {
             encoding: 'utf8',
             shell: true,
