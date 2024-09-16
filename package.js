@@ -19,7 +19,7 @@ const ARCH_TYPE = {
     X64: 'x64'
 };
 
-const version = '20.17.0';
+const version = '22.8.0';
 const platforms = [
     PLATFORM_NAME.MACOS,
     PLATFORM_NAME.LINUX,
@@ -178,7 +178,7 @@ function exec(cmd, args){
     }
 }
 
-function writeSignature(platform, arch, outputPath) {
+async function writeSignature(platform, arch, outputPath) {
     if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
         if (process.env.MAC_DEVELOPER_CN) {
             exec('codesign', ['--sign', process.env.MAC_DEVELOPER_CN, outputPath]);
@@ -187,7 +187,7 @@ function writeSignature(platform, arch, outputPath) {
     else if (platform  === PLATFORM_NAME.WINDOWS) {
         // Not required
         if (process.env.WIN_DEVELOPER_PFX && process.env.WIN_DEVELOPER_PWD) {
-            exec('signtool', ['sign',
+            exec(await findSignTool(), ['sign',
                 '/fd', 'SHA256',
                 '/f', process.env.WIN_DEVELOPER_PFX, '/p', process.env.WIN_DEVELOPER_PWD,
                 '/t', 'http://timestamp.digicert.com',
@@ -196,37 +196,41 @@ function writeSignature(platform, arch, outputPath) {
     }
 }
 
-function prepareSignature(platform, arch, nodeBinaryPath) {
+async function prepareSignature(platform, arch, nodeBinaryPath) {
     if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
         exec('xattr', ['-cr', nodeBinaryPath]);
         exec('codesign', ['--remove-signature', nodeBinaryPath]);
         return ['--macho-segment-name', 'NODE_SEA'];
     }
     else if (platform  === PLATFORM_NAME.WINDOWS) {
-        exec('signtool', ['remove', '/s', nodeBinaryPath]);
+        exec(await findSignTool(), ['remove', '/s', nodeBinaryPath]);
     }
     return [];
 }
 
-function prepareOutputDirectory() {
+async function pathExists(filePath){
+    return await fs.promises.access(filePath).then(()=>true,()=>false);
+}
+
+async function prepareOutputDirectory() {
     const binFolder = path.resolve('./bin');
-    if (fs.existsSync(binFolder)) {
-        fs.rmSync(binFolder, { recursive: true });
+    if (await pathExists(binFolder)) {
+        await fs.promises.rm(binFolder, { recursive: true });
     }
-    fs.mkdirSync(binFolder, { recursive: true });
+    await fs.promises.mkdir(binFolder, { recursive: true });
     return binFolder;
 }
 
-function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch) {
+async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch) {
     console.debug('Writing executable');
     let params = ['postject', nodeBinaryPath, 'NODE_SEA_BLOB', path.resolve(path.join(binaryOutputFolder, 'migration-audit.blob')), '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'];
 
-    params.concat(prepareSignature(platform, arch, nodeBinaryPath));
+    params.concat(await prepareSignature(platform, arch, nodeBinaryPath));
 
     // Linux will have a few warnings: https://github.com/nodejs/postject/issues/83
     exec('npx', params);
 
-    writeSignature(platform, arch, nodeBinaryPath);
+    await writeSignature(platform, arch, nodeBinaryPath);
 }
 
 async function getDownloadStream(platform, arch, nodeVersion) {
@@ -278,8 +282,30 @@ async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFol
     return outputPath;
 }
 
+async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
+    const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
+    console.debug(`Searching ${windowsKitsFolder}`);
+    const kits = await fs.promises.readdir(windowsKitsFolder);
+    for (const kit of kits){
+        const kitFolderRoot = `${windowsKitsFolder}/{kit}/bin/`;
+        console.debug(`Examining ${kitFolderRoot}`);
+        const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
+        for (const kitFolder of kitVersionFolders) {
+            const toolPath = `${kitFolderRoot}/${kitFolder}/x64/signtool.exe`;
+            console.debug(`Seeking ${toolPath}`);
+            const stat = await fs.promises.stat(toolPath);
+            if (stat.isFile()){
+                return toolPath;
+            }
+        }
+    }
+
+    console.warn('Signtool not found');
+    return 'signtool.exe';
+}
+
 async function createSingleExecutableApplication(nodeVersion, platforms, archs) {
-    const binaryOutputFolder = prepareOutputDirectory();
+    const binaryOutputFolder = await prepareOutputDirectory();
 
     exec('node', ['build.js']);
     exec('node', ['--experimental-sea-config', 'sea-config.json']);
@@ -287,7 +313,7 @@ async function createSingleExecutableApplication(nodeVersion, platforms, archs) 
     for (const platform of platforms) {
         for (const arch of archs) {
             const nodeBinaryPath = await downloadNodePlatformBinary(platform, arch, nodeVersion, binaryOutputFolder);
-            packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch);
+            await packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch);
         }
     }
 }
