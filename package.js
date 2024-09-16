@@ -352,7 +352,7 @@ const discoverSignToolAndCache = (() => {
             return cache.get(programFilesPath);
         }
         startGroup("Find signtool");
-        const result = discoverSignTool(programFilesPath);
+        const result = await discoverSignTool(programFilesPath);
         if (!result){
             result = 'signtool.exe';
             if (process.platform === 'win32') {
