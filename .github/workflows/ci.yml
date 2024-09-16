@@ -82,7 +82,7 @@ jobs:
         run: npm run packageSea ${{env.PLATFORM_OS_NAME}}
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules
-        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-amd64 bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64
+        run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64 bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64
 
       - name: Rename ARM64 binary to conform to GitHub CLI extension rules
         run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-arm64 bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64
