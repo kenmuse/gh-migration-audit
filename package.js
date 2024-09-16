@@ -34,7 +34,7 @@ const archs = [
 await main();
 
 // --------- Supporting Functions  ---------------
-let signtool = undefined;
+
 async function main() {
     const args = process.argv;
     const options = {
@@ -348,18 +348,19 @@ async function discoverSignTool(programFilesPath){
 }
 
 async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
-    if (!signtool) {
-        startGroup("Find signtool");
-        if (process.platform === 'win32') {
-            signtool = await discoverSignTool(programFilesPath);
-        }
-        
-        if (process.platform === 'win32' && !signtool) {
-            warn('Signtool not found. Relying on path.');
-            signtool = 'signtool.exe';
-        }
-        endGroup();
+    let signtool = undefined;
+    startGroup("Find signtool");
+    if (process.platform === 'win32') {
+        signtool = await discoverSignTool(programFilesPath);
     }
+
+    if (!signtool){
+        signtool = 'signtool.exe';
+        if (process.platform === 'win32') {
+            warn('Signtool not found. Relying on path.');
+        }
+    }
+    endGroup();  
 
     return signtool;
 }
