@@ -60,7 +60,7 @@ jobs:
         os: [ windows, macos, ubuntu ]
     runs-on: ${{ matrix.os }}-latest
     env:
-      PLATFORM_SHORT_NAME: ${{ matrix.os == 'macos' && 'mac' || (matrix.os == 'windows' && 'win' || 'linux' )}}
+      PLATFORM_OS_NAME: ${{ matrix.os == 'ubuntu' && 'linux' || matrix.os }}
       PLATFORM_NODE_EXECUTABLE_NAME: migration-audit-${{ matrix.os == 'macos' && 'darwin' || (matrix.os == 'windows' && 'win' || 'linux' )}}
       PLATFORM_GH_EXECUTABLE_NAME: gh-migration-audit-${{ matrix.os == 'macos' && 'darwin' || (matrix.os == 'windows' && 'windows' || 'linux' )}}
 
@@ -79,7 +79,7 @@ jobs:
         run: npm ci
       
       - name: Generate binaries
-        run: npm run packageSea ${{matrix.os}}
+        run: npm run packageSea ${{env.PLATFORM_OS_NAME}}
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules
         run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64
