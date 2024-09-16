@@ -34,7 +34,7 @@ const archs = [
 await main();
 
 // --------- Supporting Functions  ---------------
-
+let signtool;
 async function main() {
     const args = process.argv;
     const options = {
@@ -284,25 +284,24 @@ async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFol
 }
 
 function isActionsRunner() {
-    return !!process.env.GITHUB_ENV;
+    return !!process.env.GITHUB_WORKFLOW;
 }
 
 function startGroup(group) {
-    if (isActionsRunner){
+    if (isActionsRunner()){
         console.log(`::group::${group}`);
     }
 }
 
 function endGroup(group) {
-    if (isActionsRunner){
+    if (isActionsRunner()){
         console.log('::endgroup::');
     }
 }
 
 function debug(message) {
-    if (isActionsRunner){
+    if (isActionsRunner()){
         console.log(`::debug::${message}`);
-        console.debug(message);
     }
     else {
         console.debug(message);
@@ -310,7 +309,7 @@ function debug(message) {
 }
 
 function warn(message) {
-    if (isActionsRunner){
+    if (isActionsRunner()){
         console.log(`::warn::${message}`);
         console.warn(message);
     }
@@ -319,41 +318,49 @@ function warn(message) {
     }
 }
 
-async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
-    startGroup("Find signtool");
-    if (process.platform === 'win32') {
-        const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
-        debug('')
-        debug(`Searching ${windowsKitsFolder}`);
-        const kits = await fs.promises.readdir(windowsKitsFolder);
-        for (const kit of kits){
-            const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
-            debug(`Examining ${kitFolderRoot}`);
-            const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
-            for (const kitFolder of kitVersionFolders) {
-                const toolPath = `${kitFolderRoot}${kitFolder}/x64/signtool.exe`;
-                debug(`Seeking ${toolPath}`);
-                try {
-                    const stat = await fs.promises.stat(toolPath);
-                    if (stat.isFile()){
-                        const finalPath = path.resolve(toolPath);
-                        debug(`Discovered tool at ${finalPath}`);
-                        endGroup();
-                        return finalPath;
-                    }
+async function discoverSignTool(programFilesPath){
+    const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
+    debug(`Searching ${windowsKitsFolder}`);
+    const kits = await fs.promises.readdir(windowsKitsFolder);
+    for (const kit of kits){
+        const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
+        debug(`Examining ${kitFolderRoot}`);
+        const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
+        for (const kitFolder of kitVersionFolders) {
+            const toolPath = `${kitFolderRoot}${kitFolder}/x64/signtool.exe`;
+            debug(`Seeking ${toolPath}`);
+            try {
+                const stat = await fs.promises.stat(toolPath);
+                if (stat.isFile()){
+                    const finalPath = path.resolve(toolPath);
+                    debug(`Discovered tool at ${finalPath}`);
+                    return finalPath;
                 }
-                catch {
-                    debug(`Skipping ${toolPath}`);
-                }
+            }
+            catch {
+                debug(`Skipping ${toolPath}`);
             }
         }
     }
-    
-    if (process.platform === 'win32') {
-        warn('Signtool not found. Relying on path.');
+
+    return undefined;
+}
+
+async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
+    if (!signtool) {
+        startGroup("Find signtool");
+        if (process.platform === 'win32') {
+            signtool = await discoverSignTool(programFilesPath);
+        }
+        
+        if (process.platform === 'win32' && !signtool) {
+            warn('Signtool not found. Relying on path.');
+            signtool = 'signtool.exe';
+        }
+        endGroup();
     }
-    endGroup();
-    return 'signtool.exe';
+
+    return signtool;
 }
 
 async function createSingleExecutableApplication(nodeVersion, platforms, archs) {
