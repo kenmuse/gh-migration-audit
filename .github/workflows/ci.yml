@@ -82,6 +82,13 @@ jobs:
       - name: Generate binaries
         run: npm run packageSea ${{env.PLATFORM_OS_NAME}}
 
+      - name: Test binary
+        timeout-minutes: 1
+        run: |
+          cd bin
+          ls -l
+          ./${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} 
+
       - name: Rename x64 binary to conform to GitHub CLI extension rules
         run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
 
