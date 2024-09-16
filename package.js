@@ -336,7 +336,10 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
                 try {
                     const stat = await fs.promises.stat(toolPath);
                     if (stat.isFile()){
-                        return toolPath;
+                        const finalPath = path.resolve(toolPath);
+                        debug(`Discovered tool at ${finalPath}`);
+                        endGroup();
+                        return finalPath;
                     }
                 }
                 catch {
@@ -349,7 +352,7 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     if (process.platform === 'win32') {
         warn('Signtool not found. Relying on path.');
     }
-
+    endGroup();
     return 'signtool.exe';
 }
 
