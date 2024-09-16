@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import child_process from 'node:child_process';
 import path from 'node:path';
+import {parseArgs} from 'node:util';
 import axios from 'axios';
 import tar from 'tar-stream';
 import xz from 'xz';
@@ -18,11 +19,72 @@ const archs = [
     'x64'
 ];
 
-// Automatically signs files if MAC_DEVELOPER_CN 
-// or WIN_DEVELOPER_PFX and WIN_DEVELOPER_PWD are present
-await createSingleExecutableApplication(platforms, archs);
+await main();
 
 // --------- Supporting Functions  ---------------
+
+async function main() {
+    const args = process.argv;
+    const options = {
+    macSign: {
+        type: 'string',
+        short: 'm'
+    },
+    winSignPfx: {
+        type: 'string',
+        short: 'w'
+    },
+    winSignPwd: {
+        type: 'string',
+        short: 'p'
+    },
+    node: {
+        type: 'string',
+        short: 'n'
+    },
+    help: {
+        type: 'boolean'
+    }
+    };
+    const { values, positionals } = parseArgs({ args, options, allowPositionals: true });
+    
+    if (values.help) {
+        console.log('Packages the NodeJS code as a self-executing application for the specified platforms');
+        console.log('Usage: node package.js [arguments] [platforms]\n');
+
+        console.log('Platform can be macos, windows, and/or linux (default: all)')
+        console.log('Options:');
+        console.log('  --help:\t\tDisplays this help text');
+        console.log('  --macSign:\t\tCommon name for the macOS signing certificate (default: MAC_DEVELOPER_CN)');
+        console.log(`  --node:\t\tSpecific node version to use for application (default: ${version} )`);
+        console.log('  --winSignPfx:\t\tPath to the PFX file containing the signing keys for Windows (default: WIN_DEVELOPER_PFX)');
+        console.log('  --winSignPwd:\t\tPassword to use for signing the Windows application (default: WIN_DEVELOPER_PWD)');
+    }
+
+    if (values.macSign) {
+        process.env.MAC_DEVELOPER_CN = values.macSign;
+    }
+
+    if (values.winSignPfx) {
+        process.env.WIN_DEVELOPER_PFX = values.winSignPfx;
+    }
+
+    if (values.winSignPwd) {
+        process.env.WIN_DEVELOPER_PWD = values.winSignPwd;
+    }
+
+    // If user specifies platforms, they must be in the list of all available platforms
+    const platformPositionals = positionals.slice(2);
+    const buildPlatforms = platformPositionals && platformPositionals.length > 0 
+                           ? platformPositionals
+                                .flatMap(t => t.split(','))
+                                .map(t => t.toLowerCase())
+                                .map(t => t === 'macos' || t === 'mac' ? 'darwin' : t === 'windows' ? 'win' : t)
+                                .filter(t => platforms.includes(t))
+                             : platforms;
+    await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs);
+}
+
 
 async function uncompressZip(inputStream, outputStream) {
     //const stream = inputStream.pipe(zlib.createUnzip()).pipe(outputFile)
@@ -152,11 +214,11 @@ function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath
     writeSignature(platform, arch, nodeBinaryPath);
 }
 
-async function downloadNodePlatformBinary(platform, arch, outputFolder) {
+async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFolder) {
     const compressedExtension = platform == 'win' ? 'zip' : 'tar.xz';
     const binaryExtension = platform == 'win' ? '.exe' : '';
     const outputPath = path.resolve(path.join(outputFolder, `migration-audit-${platform}-${arch}${binaryExtension}`));
-    const url = `https://nodejs.org/dist/v${version}/node-v${version}-${platform}-${arch}.${compressedExtension}`;
+    const url = `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-${platform}-${arch}.${compressedExtension}`;
     console.log(`Retrieving ${url}`);
 
     const response = await axios({
@@ -181,7 +243,7 @@ async function downloadNodePlatformBinary(platform, arch, outputFolder) {
     return outputPath;
 }
 
-async function createSingleExecutableApplication(platforms, archs) {
+async function createSingleExecutableApplication(nodeVersion, platforms, archs) {
     const binaryOutputFolder = prepareOutputDirectory();
 
     exec('node', ['build.js']);
@@ -189,7 +251,7 @@ async function createSingleExecutableApplication(platforms, archs) {
 
     for (const platform of platforms) {
         for (const arch of archs) {
-            const nodeBinaryPath = await downloadNodePlatformBinary(platform, arch, binaryOutputFolder);
+            const nodeBinaryPath = await downloadNodePlatformBinary(platform, arch, nodeVersion, binaryOutputFolder);
             packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch);
         }
     }
