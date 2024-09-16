@@ -332,7 +332,7 @@ async function discoverSignTool(programFilesPath){
                 const stat = await fs.promises.stat(toolPath);
                 if (stat.isFile()){
                     const finalPath = path.resolve(toolPath);
-                    debug(`Discovered tool at ${finalPath}`);
+                    console.log(`Discovered tool at ${finalPath}`);
                     return finalPath;
                 }
             }
@@ -351,6 +351,7 @@ const discoverSignToolAndCache = (() => {
         if (cache.has(programFilesPath)) {
             return cache.get(programFilesPath);
         }
+        startGroup("Find signtool");
         const result = discoverSignTool(programFilesPath);
         if (!result){
             result = 'signtool.exe';
@@ -359,13 +360,13 @@ const discoverSignToolAndCache = (() => {
             }
         }
         cache.set(programFilesPath, result);
+        endGroup();
         return result;
     };
 })();
 
 async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     let signtool = undefined;
-    startGroup("Find signtool");
     if (process.platform === 'win32') {
         signtool = await discoverSignToolAndCache(programFilesPath);
     }
@@ -376,7 +377,6 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
             warn('Signtool not found. Relying on path.');
         }
     }
-    endGroup();  
 
     return signtool;
 }
