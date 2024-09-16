@@ -85,9 +85,12 @@ jobs:
         env:
           ACTIONS_STEP_DEBUG: true
 
-      - name: Test AMD binary
+      - name: Test "${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}}"
         run: |
-          export PATH=$PATH:./bin
+          cd bin
+          ls -l .
+          xattr -l ${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}}
+          export PATH=$PATH:.
           ${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}}
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules

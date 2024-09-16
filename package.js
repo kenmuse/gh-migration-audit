@@ -201,6 +201,8 @@ async function prepareSignature(platform, arch, nodeBinaryPath) {
     if (platform === PLATFORM_NAME.MACOS) {
         if (process.platform == 'darwin'){
             console.log("Removing signature");
+            exec('xattr', ['-d', 'com.apple.metadata:kMDItemWhereFroms', nodeBinaryPath]);
+            exec('xattr', ['-d', 'com.apple.quarantine', nodeBinaryPath]);
             exec('codesign', ['--remove-signature', nodeBinaryPath]);
         }
         return ['--macho-segment-name', 'NODE_SEA'];
