@@ -8,16 +8,27 @@ import xzd from 'xz-decompress';
 import unzipper from 'unzipper';
 import {ReadableWebToNodeStream} from '@smessie/readable-web-to-node-stream';
 
+const PLATFORM_NAME = {
+    WINDOWS: 'win',
+    MACOS: 'darwin',
+    LINUX: 'linux'
+};
+
+const ARCH_TYPE = {
+    ARM64: 'arm64',
+    X64: 'x64'
+};
+
 const version = '20.17.0';
 const platforms = [
-    'darwin',
-    'linux',
-    'win'
+    PLATFORM_NAME.MACOS,
+    PLATFORM_NAME.LINUX,
+    PLATFORM_NAME.WINDOWS
 ];
 
 const archs = [
-    'arm64',
-    'x64'
+    ARCH_TYPE.ARM64,
+    ARCH_TYPE.X64
 ];
 
 await main();
@@ -80,7 +91,7 @@ async function main() {
                            ? platformPositionals
                                 .flatMap(t => t.split(','))
                                 .map(t => t.toLowerCase())
-                                .map(t => t === 'macos' || t === 'mac' ? 'darwin' : t === 'windows' ? 'win' : t)
+                                .map(t => t === 'macos' || t === 'mac' ? PLATFORM_NAME.MACOS : t === 'windows' ? PLATFORM_NAME.WINDOWS : t)
                                 .filter(t => platforms.includes(t))
                              : platforms;
     await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs);
@@ -114,7 +125,7 @@ async function uncompressZip(inputStream, outputStream) {
     }
 }
 
-async function uncompress(inputStream, outputStream) {
+async function uncompressXz(inputStream, outputStream) {
     // Extract the node binary
     const extract = tar.extract();
     const chunks = [];
@@ -168,12 +179,12 @@ function exec(cmd, args){
 }
 
 function writeSignature(platform, arch, outputPath) {
-    if (platform == 'darwin' && arch == 'arm64') {
+    if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
         if (process.env.MAC_DEVELOPER_CN) {
             exec('codesign', ['--sign', process.env.MAC_DEVELOPER_CN, outputPath]);
         }
     }
-    else if (platform  == 'win') {
+    else if (platform  === PLATFORM_NAME.WINDOWS) {
         // Not required
         if (process.env.WIN_DEVELOPER_PFX && process.env.WIN_DEVELOPER_PWD) {
             exec('signtool', ['sign',
@@ -186,12 +197,12 @@ function writeSignature(platform, arch, outputPath) {
 }
 
 function prepareSignature(platform, arch, nodeBinaryPath) {
-    if (platform == 'darwin' && arch == 'arm64') {
+    if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
         exec('xattr', ['-cr', nodeBinaryPath]);
         exec('codesign', ['--remove-signature', nodeBinaryPath]);
         return ['--macho-segment-name', 'NODE_SEA'];
     }
-    else if (platform  == 'win') {
+    else if (platform  === PLATFORM_NAME.WINDOWS) {
         exec('signtool', ['remove', '/s', nodeBinaryPath]);
     }
     return [];
@@ -218,33 +229,52 @@ function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath
     writeSignature(platform, arch, nodeBinaryPath);
 }
 
-async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFolder) {
-    const compressedExtension = platform == 'win' ? 'zip' : 'tar.xz';
-    const binaryExtension = platform == 'win' ? '.exe' : '';
-    const outputPath = path.resolve(path.join(outputFolder, `migration-audit-${platform}-${arch}${binaryExtension}`));
+async function getDownloadStream(platform, arch, nodeVersion) {
+    const compressedExtension = platform === PLATFORM_NAME.WINDOWS ? 'zip' : 'tar.xz';
     const url = `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-${platform}-${arch}.${compressedExtension}`;
     console.log(`Retrieving ${url}`);
 
-    const response = await axios({
+    const axiosOptions = {
         method: 'GET',
         url: url,
         responseType: 'stream',
-        adapter: 'fetch'
-    });
+    };
 
-    // pipe the result stream into a file on disc
-    const stream = fs.createWriteStream(outputPath);
+    // To use the XZ stream handling, we need the Fetch adapter, 
+    if (platform != PLATFORM_NAME.WINDOWS) {
+        axiosOptions.adapter = 'fetch';
+    }
+
+    const response = await axios(axiosOptions);
+    return response.data;
+}
+
+async function extractNodeBinaryFromStream(platform, inputStream, outputPath) {
+    const binaryFileStream = fs.createWriteStream(outputPath);
     console.debug('Processing compressed stream');
-    //response.data.pipe(stream);
-    //stream.close();
-    if (platform == 'win') {
-        await uncompressZip(response.data, stream);
+
+    if (platform === PLATFORM_NAME.WINDOWS) {
+        await uncompressZip(inputStream, binaryFileStream);
     }
     else {
-        await uncompress(response.data, stream);
+        await uncompressXz(inputStream, binaryFileStream);
     }
 
-    stream.close();
+    binaryFileStream.close();
+}
+
+function getOutputPath(platform, arch, outputFolder) {
+    const binaryExtension = platform === PLATFORM_NAME.WINDOWS ? '.exe' : '';
+    const outputPath = path.resolve(path.join(outputFolder, `migration-audit-${platform}-${arch}${binaryExtension}`));
+    return outputPath;
+}
+
+async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFolder) {
+    const outputPath = getOutputPath(platform, arch, outputFolder);
+    const responseStream = await getDownloadStream(platform, arch, nodeVersion);
+
+    // pipe the result stream into a file on disc
+    await extractNodeBinaryFromStream(platform, responseStream, outputPath);
     return outputPath;
 }
 
