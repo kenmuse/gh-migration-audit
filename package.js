@@ -4,8 +4,9 @@ import path from 'node:path';
 import {parseArgs} from 'node:util';
 import axios from 'axios';
 import tar from 'tar-stream';
-import xz from 'xz';
+import xzd from 'xz-decompress';
 import unzipper from 'unzipper';
+import {ReadableWebToNodeStream} from '@smessie/readable-web-to-node-stream';
 
 const version = '20.17.0';
 const platforms = [
@@ -141,8 +142,11 @@ async function uncompress(inputStream, outputStream) {
         }
     })
 
-    inputStream
-        .pipe(new xz.Decompressor())
+    // Web stream to decompress XZ files
+    const xzDecompressStream = new xzd.XzReadableStream(inputStream);
+
+    // Convert to Node stream to pipe to the TAR extractor
+    new ReadableWebToNodeStream(xzDecompressStream)
         .pipe(extract);
     
     await new Promise(resolve => extract.on('finish', resolve));
@@ -224,7 +228,8 @@ async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFol
     const response = await axios({
         method: 'GET',
         url: url,
-        responseType: 'stream'
+        responseType: 'stream',
+        adapter: 'fetch'
     });
 
     // pipe the result stream into a file on disc
