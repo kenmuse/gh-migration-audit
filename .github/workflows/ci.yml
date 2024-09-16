@@ -91,13 +91,13 @@ jobs:
       - name: Upload ARM64 binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: package-${{matrix.os}}-arm64
+          name: package-${{env.PLATFORM_OS_NAME}}-arm64
           path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-arm64${{env.PLATFORM_EXTENSION}}
       
       - name: Upload x64 binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: package-${{matrix.os}}-amd64
+          name: package-${{env.PLATFORM_OS_NAME}}-amd64
           path: bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
 
   create_release:
