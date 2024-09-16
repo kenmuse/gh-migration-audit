@@ -59,7 +59,7 @@ jobs:
       matrix:
         os: [ windows, macos, ubuntu ]
     runs-on: ${{ matrix.os }}-latest
-    if: ${{ matrix.os }} == 'macos'
+    if: ${{ matrix.os == 'macos' }}
     env:
       PLATFORM_OS_NAME: ${{ matrix.os == 'ubuntu' && 'linux' || matrix.os }}
       PLATFORM_NODE_EXECUTABLE_NAME: migration-audit-${{ matrix.os == 'macos' && 'darwin' || (matrix.os == 'windows' && 'win' || 'linux' )}}
