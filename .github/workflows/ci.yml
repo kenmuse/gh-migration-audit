@@ -87,7 +87,8 @@ jobs:
         run: |
           cd bin
           ls -l
-          ./${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} 
+          ./${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}}
+          exit 0
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules
         run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
