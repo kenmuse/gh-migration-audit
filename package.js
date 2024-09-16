@@ -179,12 +179,12 @@ function exec(cmd, args){
 }
 
 async function writeSignature(platform, arch, outputPath) {
-    if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
+    if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64 && process.platform == 'darwin') {
         if (process.env.MAC_DEVELOPER_CN) {
             exec('codesign', ['--sign', process.env.MAC_DEVELOPER_CN, outputPath]);
         }
     }
-    else if (platform  === PLATFORM_NAME.WINDOWS) {
+    else if (platform  === PLATFORM_NAME.WINDOWS && process.platform === 'win32') {
         // Not required
         if (process.env.WIN_DEVELOPER_PFX && process.env.WIN_DEVELOPER_PWD) {
             exec(await findSignTool(), ['sign',
@@ -198,11 +198,12 @@ async function writeSignature(platform, arch, outputPath) {
 
 async function prepareSignature(platform, arch, nodeBinaryPath) {
     if (platform === PLATFORM_NAME.MACOS && arch === ARCH_TYPE.ARM64) {
-        exec('xattr', ['-cr', nodeBinaryPath]);
-        exec('codesign', ['--remove-signature', nodeBinaryPath]);
+        if (process.platform == 'darwin'){
+            exec('codesign', ['--remove-signature', nodeBinaryPath]);
+        }
         return ['--macho-segment-name', 'NODE_SEA'];
     }
-    else if (platform  === PLATFORM_NAME.WINDOWS) {
+    else if (platform  === PLATFORM_NAME.WINDOWS && process.platform == 'win32') {
         exec(await findSignTool(), ['remove', '/s', nodeBinaryPath]);
     }
     return [];
@@ -283,7 +284,7 @@ async function downloadNodePlatformBinary(platform, arch, nodeVersion, outputFol
 }
 
 function isActionsRunner() {
-
+    return !!process.env.GITHUB_ENV;
 }
 
 function startGroup(group) {
@@ -320,30 +321,35 @@ function warn(message) {
 
 async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     startGroup("Find signtool");
-    const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
-    debug('')
-    debug(`Searching ${windowsKitsFolder}`);
-    const kits = await fs.promises.readdir(windowsKitsFolder);
-    for (const kit of kits){
-        const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
-        debug(`Examining ${kitFolderRoot}`);
-        const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
-        for (const kitFolder of kitVersionFolders) {
-            const toolPath = `${kitFolderRoot}${kitFolder}/x64/signtool.exe`;
-            debug(`Seeking ${toolPath}`);
-            try {
-                const stat = await fs.promises.stat(toolPath);
-                if (stat.isFile()){
-                    return toolPath;
+    if (process.platform === 'win32') {
+        const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
+        debug('')
+        debug(`Searching ${windowsKitsFolder}`);
+        const kits = await fs.promises.readdir(windowsKitsFolder);
+        for (const kit of kits){
+            const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
+            debug(`Examining ${kitFolderRoot}`);
+            const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
+            for (const kitFolder of kitVersionFolders) {
+                const toolPath = `${kitFolderRoot}${kitFolder}/x64/signtool.exe`;
+                debug(`Seeking ${toolPath}`);
+                try {
+                    const stat = await fs.promises.stat(toolPath);
+                    if (stat.isFile()){
+                        return toolPath;
+                    }
                 }
-            }
-            catch {
-                debug(`Skipping ${toolPath}`);
+                catch {
+                    debug(`Skipping ${toolPath}`);
+                }
             }
         }
     }
+    
+    if (process.platform === 'win32') {
+        warn('Signtool not found. Relying on path.');
+    }
 
-    warn('Signtool not found');
     return 'signtool.exe';
 }
 
