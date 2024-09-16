@@ -31,8 +31,6 @@ const archs = [
     ARCH_TYPE.X64
 ];
 
-await main();
-
 // --------- Supporting Functions  ---------------
 
 async function main() {
@@ -396,3 +394,5 @@ async function createSingleExecutableApplication(nodeVersion, platforms, archs) 
         }
     }
 }
+
+await main();
