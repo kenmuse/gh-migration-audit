@@ -80,7 +80,7 @@ jobs:
         run: npm ci
       
       - name: Generate binaries
-        run: npm run packageSea -macSign '-' ${{env.PLATFORM_OS_NAME}}
+        run: npm run packageSea ${{env.PLATFORM_OS_NAME}}
 
       - name: Rename x64 binary to conform to GitHub CLI extension rules
         run: mv bin/${{ env.PLATFORM_NODE_EXECUTABLE_NAME }}-x64${{env.PLATFORM_EXTENSION}} bin/${{ env.PLATFORM_GH_EXECUTABLE_NAME }}-amd64${{env.PLATFORM_EXTENSION}}
