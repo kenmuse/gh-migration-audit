@@ -201,6 +201,7 @@ function exec(cmd, args) {
 }
 
 async function writeSignature(platform, arch, outputPath, signParams) {
+    console.log(`${platform} === ${PLATFORM_NAME.MACOS} && ${process.platform} === ${NODE_PLATFORM_NAME.MACOS} :: ${signParams.macSign}`);
     if (platform === PLATFORM_NAME.MACOS && process.platform === NODE_PLATFORM_NAME.MACOS) {
         if (signParams.macSign) {
             console.log("Signing binary");
