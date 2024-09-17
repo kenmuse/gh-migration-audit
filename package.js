@@ -17,6 +17,12 @@ const PLATFORM_NAME = {
     LINUX: 'linux'
 };
 
+// Node names for the platforms
+const NODE_PLATFORM_NAME = {
+    WINDOWS: 'win32',
+    MACOS: 'darwin'
+};
+
 // Valid architecture types
 const ARCH_TYPE = {
     ARM64: 'arm64',
@@ -79,17 +85,11 @@ async function main() {
         return 0;
     }
 
-    if (values.macSign) {
-        process.env.MAC_DEVELOPER_CN = values.macSign;
-    }
-
-    if (values.winSignPfx) {
-        process.env.WIN_DEVELOPER_PFX = values.winSignPfx;
-    }
-
-    if (values.winSignPwd) {
-        process.env.WIN_DEVELOPER_PWD = values.winSignPwd;
-    }
+    const signParams = {
+        macSign: values.macSign ?? process.env.MAC_DEVELOPER_CN,
+        winSignPfx: values.winSignPfx ?? process.env.WIN_DEVELOPER_PFX,
+        winSignPwd: values.winSignPwd ?? process.env.WIN_DEVELOPER_PWD,
+    };
 
     // If user specifies platforms, they must be in the list of all available platforms
     const platformPositionals = positionals.slice(2);
@@ -100,7 +100,7 @@ async function main() {
             .map(t => t === 'macos' || t === 'mac' ? PLATFORM_NAME.MACOS : t === 'windows' ? PLATFORM_NAME.WINDOWS : t)
             .filter(t => platforms.includes(t))
         : platforms;
-    await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs, values.output ?? './bin');
+    await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs, values.output ?? './bin', signParams);
 }
 
 function showHelp() {
@@ -182,9 +182,9 @@ async function uncompressXz(inputStream, outputStream) {
 }
 
 function exec(cmd, args) {
-    const needQuotes = process.platform === 'win32' && cmd.indexOf(' ') > -1;
+    const needQuotes = process.platform === NODE_PLATFORM_NAME.WINDOWS && cmd.indexOf(' ') > -1;
     const command = needQuotes ? `\"${cmd}\"` : cmd;
-    const quotedArgs = args.map(t => process.platform === 'win32' && t.indexOf(' ') > -1 ? `\"${t}\"` : t);
+    const quotedArgs = args.map(t => process.platform === NODE_PLATFORM_NAME.WINDOWS && t.indexOf(' ') > -1 ? `\"${t}\"` : t);
     debug(`EXEC: ${command} ${quotedArgs.join(' ')}`);
     const processResult = child_process.spawnSync(
         command,
@@ -200,20 +200,21 @@ function exec(cmd, args) {
     }
 }
 
-async function writeSignature(platform, arch, outputPath) {
-    if (platform === PLATFORM_NAME.MACOS && process.platform == 'darwin') {
-        if (process.env.MAC_DEVELOPER_CN) {
+async function writeSignature(platform, arch, outputPath, signParams) {
+    if (platform === PLATFORM_NAME.MACOS && process.platform === NODE_PLATFORM_NAME.MACOS) {
+        if (signParams.macSign) {
             console.log("Signing binary");
-            exec('codesign', ['--sign', process.env.MAC_DEVELOPER_CN, outputPath]);
+            exec('codesign', ['--sign', signParams.macSign, outputPath]);
         }
     }
-    else if (platform === PLATFORM_NAME.WINDOWS && process.platform === 'win32') {
+    else if (platform === PLATFORM_NAME.WINDOWS && process.platform === NODE_PLATFORM_NAME.WINDOWS) {
         // Not required
-        if (process.env.WIN_DEVELOPER_PFX && process.env.WIN_DEVELOPER_PWD) {
+        if (signParams.winSignPfx && signParams.winSignPwd) {
             console.log("Signing binary");
             exec(await findSignTool(), ['sign',
                 '/fd', 'SHA256',
-                '/f', process.env.WIN_DEVELOPER_PFX, '/p', process.env.WIN_DEVELOPER_PWD,
+                '/f', signParams.winSignPfx,
+                '/p', signParams.winSignPwd,
                 '/t', 'http://timestamp.digicert.com',
                 nodeBinaryPath]);
         }
@@ -228,7 +229,7 @@ async function prepareSignature(platform, arch, nodeBinaryPath) {
         }
         return ['--macho-segment-name', 'NODE_SEA'];
     }
-    else if (platform === PLATFORM_NAME.WINDOWS && process.platform == 'win32') {
+    else if (platform === PLATFORM_NAME.WINDOWS && process.platform == NODE_PLATFORM_NAME.WINDOWS) {
         console.log("Removing signature");
         exec(await findSignTool(), ['remove', '/s', nodeBinaryPath]);
     }
@@ -248,7 +249,7 @@ async function prepareOutputDirectory(outputPath) {
     return outputFolder;
 }
 
-async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch) {
+async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch, signParams) {
     debug('Writing executable');
     let params = [
         'postject',
@@ -262,7 +263,7 @@ async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBina
     // Linux will have a few warnings: https://github.com/nodejs/postject/issues/83
     exec('npx', params);
 
-    await writeSignature(platform, arch, nodeBinaryPath);
+    await writeSignature(platform, arch, nodeBinaryPath, signParams);
 }
 
 async function getDownloadStream(platform, arch, nodeVersion) {
@@ -396,7 +397,7 @@ const discoverSignToolAndCache = (() => {
         const result = await discoverSignTool(programFilesPath);
         if (!result) {
             result = 'signtool.exe';
-            if (process.platform === 'win32') {
+            if (process.platform === NODE_PLATFORM_NAME.WINDOWS) {
                 warn('Signtool not found. Relying on path.');
             }
         }
@@ -408,13 +409,13 @@ const discoverSignToolAndCache = (() => {
 
 async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     let signtool = undefined;
-    if (process.platform === 'win32') {
+    if (process.platform === NODE_PLATFORM_NAME.WINDOWS) {
         signtool = await discoverSignToolAndCache(programFilesPath);
     }
 
     if (!signtool) {
         signtool = 'signtool.exe';
-        if (process.platform === 'win32') {
+        if (process.platform === NODE_PLATFORM_NAME.WINDOWS) {
             warn('Signtool not found. Relying on path.');
         }
     }
@@ -422,7 +423,7 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     return signtool;
 }
 
-async function createSingleExecutableApplication(nodeVersion, platforms, archs, outputFolder) {
+async function createSingleExecutableApplication(nodeVersion, platforms, archs, outputFolder, signParams) {
     const binaryOutputFolder = await prepareOutputDirectory(outputFolder);
 
     exec('node', ['build.js']);
@@ -431,7 +432,7 @@ async function createSingleExecutableApplication(nodeVersion, platforms, archs, 
     for (const platform of platforms) {
         for (const arch of archs) {
             const nodeBinaryPath = await downloadNodePlatformBinary(platform, arch, nodeVersion, binaryOutputFolder);
-            await packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch);
+            await packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch, signParams);
         }
     }
 }
