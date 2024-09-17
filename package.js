@@ -1,24 +1,28 @@
 import fs from 'node:fs';
 import child_process from 'node:child_process';
 import path from 'node:path';
-import {parseArgs} from 'node:util';
+import { parseArgs } from 'node:util';
 import axios from 'axios';
 import tar from 'tar-stream';
 import xzd from 'xz-decompress';
 import unzipper from 'unzipper';
-import {ReadableWebToNodeStream} from '@smessie/readable-web-to-node-stream';
+import { ReadableWebToNodeStream } from '@smessie/readable-web-to-node-stream';
+import seaConfig from './sea-config.json' with {type: 'json'};
 
+// Valid platform names
 const PLATFORM_NAME = {
     WINDOWS: 'win',
     MACOS: 'darwin',
     LINUX: 'linux'
 };
 
+// Valid architecture types
 const ARCH_TYPE = {
     ARM64: 'arm64',
     X64: 'x64'
 };
 
+// Configuration defaults
 const version = '22.8.0';
 const platforms = [
     PLATFORM_NAME.MACOS,
@@ -36,39 +40,35 @@ const archs = [
 async function main() {
     const args = process.argv;
     const options = {
-    macSign: {
-        type: 'string',
-        short: 'm'
-    },
-    winSignPfx: {
-        type: 'string',
-        short: 'w'
-    },
-    winSignPwd: {
-        type: 'string',
-        short: 'p'
-    },
-    node: {
-        type: 'string',
-        short: 'n'
-    },
-    help: {
-        type: 'boolean'
-    }
+        macSign: {
+            type: 'string',
+            short: 'm'
+        },
+        winSignPfx: {
+            type: 'string',
+            short: 'w'
+        },
+        winSignPwd: {
+            type: 'string',
+            short: 'p'
+        },
+        node: {
+            type: 'string',
+            short: 'n'
+        },
+        help: {
+            type: 'boolean'
+        },
+        output: {
+            type: 'string',
+            short: 'o'
+        }
     };
     const { values, positionals } = parseArgs({ args, options, allowPositionals: true });
-    
-    if (values.help) {
-        console.log('Packages the NodeJS code as a self-executing application for the specified platforms');
-        console.log('Usage: node package.js [arguments] [platforms]\n');
 
-        console.log('Platform can be macos, windows, and/or linux (default: all)')
-        console.log('Options:');
-        console.log('  --help:\t\tDisplays this help text');
-        console.log('  --macSign:\t\tCommon name for the macOS signing certificate (default: MAC_DEVELOPER_CN)');
-        console.log(`  --node:\t\tSpecific node version to use for application (default: ${version} )`);
-        console.log('  --winSignPfx:\t\tPath to the PFX file containing the signing keys for Windows (default: WIN_DEVELOPER_PFX)');
-        console.log('  --winSignPwd:\t\tPassword to use for signing the Windows application (default: WIN_DEVELOPER_PWD)');
+    if (values.help) {
+        showHelp();
+        return 0;
     }
 
     if (values.macSign) {
@@ -85,41 +85,53 @@ async function main() {
 
     // If user specifies platforms, they must be in the list of all available platforms
     const platformPositionals = positionals.slice(2);
-    const buildPlatforms = platformPositionals && platformPositionals.length > 0 
-                           ? platformPositionals
-                                .flatMap(t => t.split(','))
-                                .map(t => t.toLowerCase())
-                                .map(t => t === 'macos' || t === 'mac' ? PLATFORM_NAME.MACOS : t === 'windows' ? PLATFORM_NAME.WINDOWS : t)
-                                .filter(t => platforms.includes(t))
-                             : platforms;
-    await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs);
+    const buildPlatforms = platformPositionals && platformPositionals.length > 0
+        ? platformPositionals
+            .flatMap(t => t.split(','))
+            .map(t => t.toLowerCase())
+            .map(t => t === 'macos' || t === 'mac' ? PLATFORM_NAME.MACOS : t === 'windows' ? PLATFORM_NAME.WINDOWS : t)
+            .filter(t => platforms.includes(t))
+        : platforms;
+    await createSingleExecutableApplication(values.node ?? version, buildPlatforms, archs, values.output ?? './bin');
 }
 
+function showHelp() {
+    console.log('\nUsage: node package.js [arguments] [platforms]\n');
+    console.log('Packages the NodeJS code as a self-executing application for the specified platforms.');
+    console.log('Platform names can be separated by spaces or commas (default: macos windows linux)\n')
+
+    console.log('Options:');
+    console.log('  --help \t\tDisplays this help text');
+    console.log('  --macSign, -m \tCommon name for the macOS signing certificate (default: MAC_DEVELOPER_CN)');
+    console.log(`  --node, -n \t\tSpecific node version to use for application (default: ${version} )`);
+    console.log(`  --output, -o \t\tPath to the folder that will contain the binaries (default: ./bin )`);
+    console.log('  --winSignPfx, -w \tPath to the PFX file containing the signing keys for Windows (default: WIN_DEVELOPER_PFX)');
+    console.log('  --winSignPwd, -p \tPassword to use for signing the Windows application (default: WIN_DEVELOPER_PWD)');
+}
 
 async function uncompressZip(inputStream, outputStream) {
     //const stream = inputStream.pipe(zlib.createUnzip()).pipe(outputFile)
     //await new Promise(resolve => stream.on('finish', resolve))
-    const zip = inputStream.pipe(unzipper.Parse({forceStream: true}));
+    const zip = inputStream.pipe(unzipper.Parse({ forceStream: true }));
     for await (const entry of zip) {
-      const fileName = entry.path;
-      const type = entry.type;
-      if (type ==='File' && fileName.endsWith('/node.exe')) {
-        await new Promise((resolve, reject) =>
-        {
-            debug(`Extracting ${fileName}`);
-            entry.pipe(outputStream)
-            .on('finish', () => {
-                debug(`Extraction complete`);
-                resolve()
-            })
-            .on('error', (err) => { 
-                debug(`Extraction failed: ${err}`);
-                reject(err);
+        const fileName = entry.path;
+        const type = entry.type;
+        if (type === 'File' && fileName.endsWith('/node.exe')) {
+            await new Promise((resolve, reject) => {
+                debug(`Extracting ${fileName}`);
+                entry.pipe(outputStream)
+                    .on('finish', () => {
+                        debug(`Extraction complete`);
+                        resolve()
+                    })
+                    .on('error', (err) => {
+                        debug(`Extraction failed: ${err}`);
+                        reject(err);
+                    });
             });
-        });
-      } else {
-        entry.autodrain();
-      }
+        } else {
+            entry.autodrain();
+        }
     }
 }
 
@@ -157,22 +169,25 @@ async function uncompressXz(inputStream, outputStream) {
     // Convert to Node stream to pipe to the TAR extractor
     new ReadableWebToNodeStream(xzDecompressStream)
         .pipe(extract);
-    
+
     await new Promise(resolve => extract.on('finish', resolve));
 }
 
-function exec(cmd, args){
+function exec(cmd, args) {
     const needQuotes = process.platform === 'win32' && cmd.indexOf(' ') > -1;
+    const command = needQuotes ? `\"${cmd}\"` : cmd;
+    const quotedArgs = args.map(t => process.platform === 'win32' && t.indexOf(' ') > -1 ? `\"${t}\"` : t);
+    debug(`EXEC: ${command} ${quotedArgs.join(' ')}`);
     const processResult = child_process.spawnSync(
-        needQuotes ? `\"${cmd}\"` : cmd,
-        args.map(t => process.platform === 'win32' && t.indexOf(' ') > -1 ? `\"${t}\"` : t),
+        command,
+        quotedArgs,
         {
             encoding: 'utf8',
             shell: true,
         }
     );
     console.log(processResult.stdout);
-    if (processResult.stderr){
+    if (processResult.stderr) {
         console.error(processResult.stderr);
     }
 }
@@ -184,7 +199,7 @@ async function writeSignature(platform, arch, outputPath) {
             exec('codesign', ['--sign', process.env.MAC_DEVELOPER_CN, outputPath]);
         }
     }
-    else if (platform  === PLATFORM_NAME.WINDOWS && process.platform === 'win32') {
+    else if (platform === PLATFORM_NAME.WINDOWS && process.platform === 'win32') {
         // Not required
         if (process.env.WIN_DEVELOPER_PFX && process.env.WIN_DEVELOPER_PWD) {
             console.log("Signing binary");
@@ -199,37 +214,42 @@ async function writeSignature(platform, arch, outputPath) {
 
 async function prepareSignature(platform, arch, nodeBinaryPath) {
     if (platform === PLATFORM_NAME.MACOS) {
-        if (process.platform == 'darwin'){
+        if (process.platform == 'darwin') {
             console.log("Removing signature");
             exec('codesign', ['--remove-signature', nodeBinaryPath]);
         }
         return ['--macho-segment-name', 'NODE_SEA'];
     }
-    else if (platform  === PLATFORM_NAME.WINDOWS && process.platform == 'win32') {
+    else if (platform === PLATFORM_NAME.WINDOWS && process.platform == 'win32') {
         console.log("Removing signature");
         exec(await findSignTool(), ['remove', '/s', nodeBinaryPath]);
     }
     return [];
 }
 
-async function pathExists(filePath){
-    return await fs.promises.access(filePath).then(()=>true,()=>false);
+async function pathExists(filePath) {
+    return await fs.promises.access(filePath).then(() => true, () => false);
 }
 
-async function prepareOutputDirectory() {
-    const binFolder = path.resolve('./bin');
-    if (await pathExists(binFolder)) {
-        await fs.promises.rm(binFolder, { recursive: true });
+async function prepareOutputDirectory(outputPath) {
+    const outputFolder = path.resolve(outputPath);
+    if (await pathExists(outputFolder)) {
+        await fs.promises.rm(outputFolder, { recursive: true });
     }
-    await fs.promises.mkdir(binFolder, { recursive: true });
-    return binFolder;
+    await fs.promises.mkdir(outputFolder, { recursive: true });
+    return outputFolder;
 }
 
 async function packageAsSingleExecutableApplication(binaryOutputFolder, nodeBinaryPath, platform, arch) {
     debug('Writing executable');
-    let params = ['postject', nodeBinaryPath, 'NODE_SEA_BLOB', path.resolve(path.join(binaryOutputFolder, 'migration-audit.blob')), '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'];
-
-    params.concat(await prepareSignature(platform, arch, nodeBinaryPath));
+    let params = [
+        'postject',
+        nodeBinaryPath,
+        'NODE_SEA_BLOB',
+        path.resolve(seaConfig.output),
+        '--sentinel-fuse',
+        'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2']
+        .concat(await prepareSignature(platform, arch, nodeBinaryPath));
 
     // Linux will have a few warnings: https://github.com/nodejs/postject/issues/83
     exec('npx', params);
@@ -291,19 +311,19 @@ function isActionsRunner() {
 }
 
 function startGroup(group) {
-    if (isActionsRunner()){
+    if (isActionsRunner()) {
         console.log(`::group::${group}`);
     }
 }
 
 function endGroup(group) {
-    if (isActionsRunner()){
+    if (isActionsRunner()) {
         console.log('::endgroup::');
     }
 }
 
 function debug(message) {
-    if (isActionsRunner()){
+    if (isActionsRunner()) {
         console.log(`::debug::${message}`);
     }
     else {
@@ -312,7 +332,7 @@ function debug(message) {
 }
 
 function warn(message) {
-    if (isActionsRunner()){
+    if (isActionsRunner()) {
         console.log(`::warn::${message}`);
         console.warn(message);
     }
@@ -321,11 +341,11 @@ function warn(message) {
     }
 }
 
-async function discoverSignTool(programFilesPath){
+async function discoverSignTool(programFilesPath) {
     const windowsKitsFolder = `${programFilesPath}/Windows Kits/`;
     debug(`Searching ${windowsKitsFolder}`);
     const kits = await fs.promises.readdir(windowsKitsFolder);
-    for (const kit of kits){
+    for (const kit of kits) {
         const kitFolderRoot = `${windowsKitsFolder}${kit}/bin/`;
         debug(`Examining ${kitFolderRoot}`);
         const kitVersionFolders = await fs.promises.readdir(kitFolderRoot);
@@ -334,7 +354,7 @@ async function discoverSignTool(programFilesPath){
             debug(`Seeking ${toolPath}`);
             try {
                 const stat = await fs.promises.stat(toolPath);
-                if (stat.isFile()){
+                if (stat.isFile()) {
                     const finalPath = path.resolve(toolPath);
                     console.log(`Discovered tool at ${finalPath}`);
                     return finalPath;
@@ -357,7 +377,7 @@ const discoverSignToolAndCache = (() => {
         }
         startGroup("Find signtool");
         const result = await discoverSignTool(programFilesPath);
-        if (!result){
+        if (!result) {
             result = 'signtool.exe';
             if (process.platform === 'win32') {
                 warn('Signtool not found. Relying on path.');
@@ -375,7 +395,7 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
         signtool = await discoverSignToolAndCache(programFilesPath);
     }
 
-    if (!signtool){
+    if (!signtool) {
         signtool = 'signtool.exe';
         if (process.platform === 'win32') {
             warn('Signtool not found. Relying on path.');
@@ -385,8 +405,8 @@ async function findSignTool(programFilesPath = 'C:/Program Files (x86)') {
     return signtool;
 }
 
-async function createSingleExecutableApplication(nodeVersion, platforms, archs) {
-    const binaryOutputFolder = await prepareOutputDirectory();
+async function createSingleExecutableApplication(nodeVersion, platforms, archs, outputFolder) {
+    const binaryOutputFolder = await prepareOutputDirectory(outputFolder);
 
     exec('node', ['build.js']);
     exec('node', ['--experimental-sea-config', 'sea-config.json']);
