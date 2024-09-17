@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import child_process from 'node:child_process';
+import https from 'node:https';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import axios from 'axios';
@@ -34,6 +35,13 @@ const archs = [
     ARCH_TYPE.ARM64,
     ARCH_TYPE.X64
 ];
+
+const httpsAgent = new https.Agent({
+    keepAlive: true,
+    timeout: 15000,
+    scheduling: 'fifo',
+    keepAliveMsecs: 5000 
+});
 
 // --------- Supporting Functions  ---------------
 
@@ -262,14 +270,23 @@ async function getDownloadStream(platform, arch, nodeVersion) {
     const url = `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-${platform}-${arch}.${compressedExtension}`;
     console.log(`Retrieving ${url}`);
 
+    const acceptHeader = platform !== PLATFORM_NAME.WINDOWS
+        ? 'application/x-xz, application/x-xz-compressed-tar, */*'
+        : 'application/zip, */*';
+
     const axiosOptions = {
+        headers: {
+            Accept: acceptHeader,
+        },
         method: 'GET',
+        timeout: 15000,
+        httpsAgent: httpsAgent,
         url: url,
         responseType: 'stream',
     };
 
     // To use the XZ stream handling, we need the Fetch adapter, 
-    if (platform != PLATFORM_NAME.WINDOWS) {
+    if (platform !== PLATFORM_NAME.WINDOWS) {
         axiosOptions.adapter = 'fetch';
     }
 
